@@ -1,0 +1,131 @@
+import requests
+import json
+
+def emotion_detector(text_to_analyze):
+    url = 'https://sn-watson-emotion.labs.skills.network/v1/watson.runtime.nlp.v1/NlpService/EmotionPredict'
+    header = {"grpc-metadata-mm-model-id": "emotion_aggregated-workflow_lang_en_stock"}
+    myobj = { "raw_document": { "text": text_to_analyze } }
+    response = requests.post(url, json=myobj, headers=header)
+    formatted_response = json.loads(response.text)
+    
+    # Extracting the required emotions and their scores
+    if response.status_code == 200:
+        emotions = formatted_response.get('emotionPredictions', [])
+        if emotions:
+            emotion = emotions[0]['emotion']
+        else:
+            emotion = None
+    else:
+        emotion = None
+
+    if emotion:
+        anger_score = emotion.get('anger', 0)
+        disgust_score = emotion.get('disgust', 0)
+        fear_score = emotion.get('fear', 0)
+        joy_score = emotion.get('joy', 0)
+        sadness_score = emotion.get('sadness', 0)
+        
+        # Finding the dominant emotion
+        emotion_scores = {
+            'anger': anger_score,
+            'disgust': disgust_score,
+            'fear': fear_score,
+            'joy': joy_score,
+            'sadness': sadness_score
+        }
+        dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+        
+        # Creating the output dictionary
+        output = {
+            'anger': anger_score,
+            'disgust': disgust_score,
+            'fear': fear_score,
+            'joy': joy_score,
+            'sadness': sadness_score,
+            'dominant_emotion': dominant_emotion
+        }
+    else:
+        output = None
+    
+    return output
+
+
+
+
+Test
+from EmotionDetection.emotion_detection import emotion_detector
+
+import unittest 
+
+class TestEmotionDetection(unittest.TestCase):
+    def test_emotion_detector(self):
+        result_1 = emotion_detector('I am glad this happened')
+        self.assertEqual(result_1['dominant_emotion'], 'joy')
+
+        result_2 = emotion_detector('I am really mad about this')
+        self.assertEqual(result_2['dominant_emotion'], 'anger')
+
+        result_3 = emotion_detector('I feel disgusted just hearing about this')
+        self.assertEqual(result_3['dominant_emotion'], 'disgust')
+
+        result_4 = emotion_detector('I am so sad about this')
+        self.assertEqual(result_4['dominant_emotion'], 'sadness')
+
+        result_5 = emotion_detector('I am really afraid that this will happen')
+        self.assertEqual(result_5['dominant_emotion'], 'fear')
+
+if __name__ == "__main__":
+    unittest.main()
+
+Server
+# server.py
+
+"""
+This function initiates the sentiment analysis application to be executed 
+over the Flask channel and deployed on localhost:5000.
+"""
+
+# Import necessary modules from the Flask framework package
+from flask import Flask, render_template, request, jsonify
+from EmotionDetection.emotion_detection import emotion_detector
+
+# Initiate the Flask app
+app = Flask("Emotion Detector")
+
+@app.route("/emotionDetector")
+def emot_detector():
+    """
+    Route for sentiment analysis. Retrieves text to analyze from
+    query parameters and returns sentiment analysis results.
+    """
+    text_to_analyze = request.args.get('textToAnalyze')
+
+    if not text_to_analyze:
+        return "No text provided for analysis.", 400
+
+    # Call the emotion_detector function
+    result = emotion_detector(text_to_analyze)
+
+    # Check if the dominant emotion is None
+    if result['dominant_emotion'] is None:
+        return "Invalid text! Please try again.", 400
+    
+    # Format the response
+    response_text = (
+        f"For the given statement, the system response is 'anger': {result['anger']}, "
+        f"'disgust': {result['disgust']}, 'fear': {result['fear']}, "
+        f"'joy': {result['joy']} and 'sadness': {result['sadness']}. "
+        f"The dominant emotion is {result['dominant_emotion']}."
+    )
+    
+    return response_text
+
+@app.route("/")
+def render_index_page():
+    """
+    Route for the index page. Renders the index.html template.
+    """
+    return render_template('index.html')
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5500)
